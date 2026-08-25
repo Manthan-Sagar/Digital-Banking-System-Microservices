@@ -12,6 +12,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.banking.accountservice.exception.*;
+
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
@@ -32,7 +34,7 @@ public class AccountService {
         log.info("Creating account for: {}", request.getEmail());
 
         if (accountRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Account already exists for email: "
+            throw new AccountAlreadyExistsException("Account already exists for email: "
                     + request.getEmail());
         }
 
@@ -83,11 +85,11 @@ public class AccountService {
         Account account = findByAccountNumber(accountNumber);
 
         if (account.getStatus() != AccountStatus.ACTIVE) {
-            throw new RuntimeException("Account is not active: " + accountNumber);
+            throw new AccountNotActiveException("Account is not active: " + accountNumber);
         }
 
         if (account.getBalance().compareTo(amount) < 0) {
-            throw new RuntimeException("Insufficient balance");
+            throw new InsufficientBalanceException("Insufficient balance");
         }
 
         account.setBalance(account.getBalance().subtract(amount));
@@ -149,7 +151,7 @@ public class AccountService {
 
     private Account findByAccountNumber(String accountNumber) {
         return accountRepository.findByAccountNumber(accountNumber)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new AccountNotFoundException(
                         "Account not found: " + accountNumber));
     }
 
