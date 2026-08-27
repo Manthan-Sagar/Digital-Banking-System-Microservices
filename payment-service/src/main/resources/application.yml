@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: jdbc:mysql://host.docker.internal:3306/payment_db?createDatabaseIfNotExist=true
+    username: user
+    password: 1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  kafka:
+    bootstrap-servers: localhost:29092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+server:
+  port: 8083
+
+# Razorpay Configuration
+razorpay:
+  key-id: your_key_id
+  key-secret: your_key_secret
+  webhook-secret: your-webhook-secret
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
