@@ -12,9 +12,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -58,7 +58,7 @@ public class TransactionEventConsumer {
 
             // Store OTP in Redis - expires in 5 minutes
             String otpKey = "verification:otp" + transactionId;
-            redisTemplate.opsForValue().set(otpKey, otp, OTP_EXPIRY_MINUTES, TimeUnit.MINUTES);
+            redisTemplate.opsForValue().set(otpKey, otp, Duration.ofMinutes(OTP_EXPIRY_MINUTES));
 
             // Update Status
             transaction.setStatus(TransactionStatus.PENDING_VERIFICATION);
