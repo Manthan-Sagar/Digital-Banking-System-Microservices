@@ -143,7 +143,7 @@ public class PaymentService {
             event.put("accountNumber", payment.getAccountNumber());
             event.put("amount", payment.getAmount());
             event.put("reason", "Payment failed via Razorpay");
-            kafkaTemplate.send("payment.failed", payment.getId(), event);
+            kafkaTemplate.send(PAYMENT_FAILED_TOPIC, payment.getId(), event);
 
             log.warn("Payment failed: {}", payment.getId());
 
