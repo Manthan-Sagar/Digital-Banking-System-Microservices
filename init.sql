@@ -1,0 +1,9 @@
+CREATE DATABASE IF NOT EXISTS account_db;
+CREATE DATABASE IF NOT EXISTS transaction_db;
+CREATE DATABASE IF NOT EXISTS payment_db;
+
+-- Create 'user' and grant permissions if it doesn't exist
+CREATE USER IF NOT EXISTS 'user'@'%' IDENTIFIED BY '1234';
+GRANT ALL PRIVILEGES ON *.* TO 'user'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;

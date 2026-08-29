@@ -2,7 +2,7 @@ spring:
   application:
     name: transaction-service
   datasource:
-    url: jdbc:mysql://host.docker.internal:3306/transaction_db?createDatabaseIfNotExist=true
+    url: jdbc:mysql://localhost:${MYSQL_HOST_PORT:3388}/transaction_db?createDatabaseIfNotExist=true
     username: user
     password: 1234
     driver-class-name: com.mysql.cj.jdbc.Driver
