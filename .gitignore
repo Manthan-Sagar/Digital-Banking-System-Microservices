@@ -1,2 +1,22 @@
 # Local Environment Configuration
 .env
+
+# Application Logs
+*.log
+gateway.log
+
+# IDE and Editor Files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Build Artifacts (root and submodules)
+target/
+**/target/
+
