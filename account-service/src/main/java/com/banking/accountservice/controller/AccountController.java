@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/v1/accounts")
+@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 @Slf4j
 public class AccountController {

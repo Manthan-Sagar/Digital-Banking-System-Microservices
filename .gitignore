@@ -1,9 +1,16 @@
-# Local Environment Configuration
+# Local Environment Configuration & Secrets
 .env
+.env.*
+!.env.example
+*.env
 
-# Application Logs
+# Application & Server Logs
 *.log
-gateway.log
+**/*.log
+
+# Postman local caches
+.postman/
+postman/
 
 # IDE and Editor Files
 .idea/
@@ -12,11 +19,15 @@ gateway.log
 *.ipr
 *.iws
 
-# OS Files
+# OS Files & Temporary Files
 .DS_Store
 Thumbs.db
+*.tmp
+*.swp
+*~
 
 # Build Artifacts (root and submodules)
 target/
 **/target/
+
 

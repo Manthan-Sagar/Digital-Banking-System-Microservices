@@ -7,39 +7,52 @@ spring:
       port: 6379
   cloud:
     gateway:
-      routes:
-        # Account Service Routes
-        - id: account-service
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/v1/accounts/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins: "*"
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders: "*"
+          routes:
+            # Account Service Routes
+            - id: account-service
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/v1/accounts, /api/v1/accounts/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
 
-        # Transaction Service Routes
-        - id: transaction-service
-          uri: http://localhost:8082
-          predicates:
-            - Path=/api/v1/transactions/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
+            # Transaction Service Routes
+            - id: transaction-service
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/v1/transactions, /api/v1/transactions/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
 
-        # Payment Service Routes
-        - id: payment-service
-          uri: http://localhost:8083
-          predicates:
-            - Path=/api/v1/payments/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
+            # Payment Service Routes
+            - id: payment-service
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/v1/payments, /api/v1/payments/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 5
+                    redis-rate-limiter.burstCapacity: 10
 server:
   port: 8080
 
@@ -48,3 +61,5 @@ management:
     web:
       exposure:
         include: health,info,gateway
+
+

@@ -516,7 +516,7 @@ Account blocked successfully
   "razorpayOrderId": "order_OG72hKabc123",
   "amount": 1500.00,
   "currency": "INR",
-  "keyId": "rzp_test_TV8ZypiM4Ccwqb",
+  "keyId": "rzp_test_your_key_id",
   "status": "CREATED"
 }
 ```

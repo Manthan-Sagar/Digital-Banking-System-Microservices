@@ -7,5 +7,93 @@
 	"settings": {
 		"java.configuration.updateBuildConfiguration": "interactive",
 		"maven.view": "hierarchical"
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"type": "java",
+				"name": "API Gateway",
+				"request": "launch",
+				"mainClass": "com.banking.apigateway.ApiGatewayApplication",
+				"projectName": "api-gateway",
+				"cwd": "${workspaceFolder}/api-gateway",
+				"envFile": "${workspaceFolder}/.env",
+				"shortenCommandLine": "argfile"
+			},
+			{
+				"type": "java",
+				"name": "Account Service",
+				"request": "launch",
+				"mainClass": "com.banking.accountservice.AccountServiceApplication",
+				"projectName": "account-service",
+				"cwd": "${workspaceFolder}/account-service",
+				"envFile": "${workspaceFolder}/.env",
+				"shortenCommandLine": "argfile"
+			},
+			{
+				"type": "java",
+				"name": "Transaction Service",
+				"request": "launch",
+				"mainClass": "com.banking.transactionservice.TransactionServiceApplication",
+				"projectName": "transaction-service",
+				"cwd": "${workspaceFolder}/transaction-service",
+				"envFile": "${workspaceFolder}/.env",
+				"shortenCommandLine": "argfile"
+			},
+			{
+				"type": "java",
+				"name": "Payment Service",
+				"request": "launch",
+				"mainClass": "com.banking.paymentservice.PaymentServiceApplication",
+				"projectName": "payment-service",
+				"cwd": "${workspaceFolder}/payment-service",
+				"envFile": "${workspaceFolder}/.env",
+				"shortenCommandLine": "argfile"
+			},
+			{
+				"type": "java",
+				"name": "Fraud Detection Service",
+				"request": "launch",
+				"mainClass": "com.banking.frauddetectionservice.FraudDetectionServiceApplication",
+				"projectName": "fraud-detection-service",
+				"cwd": "${workspaceFolder}/fraud-detection-service",
+				"envFile": "${workspaceFolder}/.env",
+				"shortenCommandLine": "argfile"
+			},
+			{
+				"type": "java",
+				"name": "Notification Service",
+				"request": "launch",
+				"mainClass": "com.banking.notificationservice.NotificationServiceApplication",
+				"projectName": "notification-service",
+				"cwd": "${workspaceFolder}/notification-service",
+				"envFile": "${workspaceFolder}/.env",
+				"shortenCommandLine": "argfile"
+			}
+		],
+		"compounds": [
+			{
+				"name": "Run All Microservices",
+				"configurations": [
+					"Account Service",
+					"Transaction Service",
+					"Payment Service",
+					"Fraud Detection Service",
+					"Notification Service",
+					"API Gateway"
+				]
+			},
+			{
+				"name": "Run Core Services (No Gateway)",
+				"configurations": [
+					"Account Service",
+					"Transaction Service",
+					"Payment Service",
+					"Fraud Detection Service",
+					"Notification Service"
+				]
+			}
+		]
 	}
 }
