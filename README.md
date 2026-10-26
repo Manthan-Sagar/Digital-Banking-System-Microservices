@@ -1,4 +1,4 @@
-# 🏦 Distributed Digital Banking Platform — Microservices Architecture
+# Digital Banking System — Microservices
 
 [![Java](https://img.shields.io/badge/Java-25-orange.svg?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-brightgreen.svg?logo=springboot)](https://spring.io/projects/spring-boot)
@@ -7,372 +7,310 @@
 [![Redis](https://img.shields.io/badge/Redis-Latest-red.svg?logo=redis)](https://redis.io/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.0-blue.svg?logo=mysql)](https://www.mysql.com/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker)](https://www.docker.com/)
-[![Razorpay](https://img.shields.io/badge/Razorpay-Payment%20Gateway-0C2340.svg?logo=razorpay)](https://razorpay.com/)
 
-A production-ready, highly scalable, and fault-tolerant **Digital Banking System** engineered with a **Distributed Microservices Architecture**. This platform models real-world core banking operations, featuring **Distributed Transactions with SAGA Choreography and Automatic Compensations**, **Real-Time Multi-Pattern Fraud Detection**, **Distributed Rate Limiting with Redis & Spring Cloud Gateway**, and **Seamless Third-Party Payment Gateway Integration via Razorpay**.
-
----
-
-## 📑 Table of Contents
-
-- [Architectural Overview](#-architectural-overview)
-- [System Architecture Diagram](#-system-architecture-diagram)
-- [Microservices Catalog](#-microservices-catalog)
-- [Core Engineering Highlights](#-core-engineering-highlights)
-  - [1. Distributed SAGA Pattern & Choreography](#1-distributed-saga-pattern--choreography)
-  - [2. Multi-Layered Fraud Detection Engine](#2-multi-layered-fraud-detection-engine)
-  - [3. Distributed Rate Limiting (Token Bucket)](#3-distributed-rate-limiting-token-bucket)
-  - [4. Razorpay Payment Gateway & Webhook Lifecycle](#4-razorpay-payment-gateway--webhook-lifecycle)
-- [Kafka Event-Driven Messaging Matrix](#-kafka-event-driven-messaging-matrix)
-- [Database Schema & Multi-Database Strategy](#-database-schema--multi-database-strategy)
-- [REST API Reference](#-rest-api-reference)
-  - [Account Service Endpoints](#account-service-port-8081--gateway-8080)
-  - [Transaction Service Endpoints](#transaction-service-port-8082--gateway-8080)
-  - [Payment Service Endpoints](#payment-service-port-8083--gateway-8080)
-- [Technology Stack](#-technology-stack)
-- [Project Directory Structure](#-project-directory-structure)
-- [Local Setup & Getting Started](#-local-setup--getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Step 1: Clone the Repository](#step-1-clone-the-repository)
-  - [Step 2: Configure Environment Variables](#step-2-configure-environment-variables)
-  - [Step 3: Start Infrastructure Services (Docker Compose)](#step-3-start-infrastructure-services-docker-compose)
-  - [Step 4: Build and Start Microservices](#step-4-build-and-start-microservices)
-- [End-to-End Verification Scenarios](#-end-to-end-verification-scenarios)
-- [Production Considerations & Future Roadmap](#-production-considerations--future-roadmap)
+A backend implementation of a core banking platform built on microservices. The system handles money transfers across distributed services without a shared database, using the **SAGA choreography pattern** to keep data consistent. It includes a real-time fraud detection engine, Redis-based rate limiting at the gateway, and a Razorpay payment integration.
 
 ---
 
-## 🏛 Architectural Overview
+## Table of Contents
 
-The banking platform implements a decoupled microservices design adhering to Domain-Driven Design (DDD) principles and high-throughput architectural patterns:
-
-- **Single Entry Perimeter**: All client traffic is routed through a reactive **Spring Cloud API Gateway** that terminates external requests, performs IP-based rate limiting using Redis, and routes traffic to downstream microservices.
-- **Database-per-Service**: Each domain service maintains dedicated database schemas (`account_db`, `transaction_db`, `payment_db`) ensuring strict domain isolation, loose coupling, and data ownership boundaries.
-- **Event-Driven Choreography**: Services communicate asynchronously over **Apache Kafka**, ensuring non-blocking operations, eventual consistency, and extreme resilience during load spikes.
-- **Distributed State & In-Memory Caching**: **Redis** is leveraged for distributed token-bucket rate limiting, short-lived Two-Factor Authentication (OTP) state with TTL expiry, and sliding-window velocity tracking for fraud evaluation.
-- **Declarative Inter-Service Communication**: Synchronous inter-service queries and balance operations utilize **Spring Cloud OpenFeign** clients.
+- [System Overview](#system-overview)
+- [Services](#services)
+- [How a Transfer Works (SAGA)](#how-a-transfer-works-saga)
+- [Fraud Detection](#fraud-detection)
+- [Rate Limiting](#rate-limiting)
+- [Razorpay Integration](#razorpay-integration)
+- [Kafka Topics](#kafka-topics)
+- [Database Schema](#database-schema)
+- [API Reference](#api-reference)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Local Setup](#local-setup)
+- [Testing the Flows](#testing-the-flows)
+- [Roadmap](#roadmap)
 
 ---
 
-## 📊 System Architecture Diagram
+## System Overview
 
-```mermaid
-flowchart TD
-    Client(["🌐 Web / Mobile Client"])
-
-    subgraph Perimeter ["Edge & Routing Layer"]
-        Gateway["🚪 API Gateway (Port 8080)<br/>Spring Cloud Gateway + Redis Rate Limiter"]
-    end
-
-    subgraph Caching ["In-Memory Data Store"]
-        Redis[("⚡ Redis (Port 6379)<br/>• Rate Limit Buckets<br/>• 5-Min OTP Store with TTL<br/>• Velocity Counters & Moving Avgs")]
-    end
-
-    subgraph Broker ["Message Broker (Kafka)"]
-        Kafka["📬 Apache Kafka Cluster (Port 29092)<br/>Topics: transaction.initiated, transaction.completed,<br/>verification.required, fraud.check.clean,<br/>fraud.detected, transaction.refunded, payment.completed"]
-    end
-
-    subgraph CoreServices ["Microservices Ecosystem"]
-        AccountSvc["👤 Account Service (Port 8081)<br/>• Ledger Management<br/>• Debit / Credit Operations<br/>• Account Lifecycle & Blocking"]
-        TxnSvc["💳 Transaction Service (Port 8082)<br/>• SAGA Coordinator<br/>• Transfer Processing<br/>• OTP Verification & Compensations"]
-        FraudSvc["🛡️ Fraud Detection Service (Port 8084)<br/>• Velocity Check (60s window)<br/>• Amount Anomaly (3x Avg)<br/>• Balance Depletion (>90%)"]
-        PaymentSvc["💸 Payment Service (Port 8083)<br/>• Razorpay Order Creation<br/>• Webhook Capture & Signatures"]
-        NotifSvc["🔔 Notification Service (Port 8085)<br/>• Multi-channel Alerts (Console / SMS)<br/>• Transaction, Refund & Fraud Notices"]
-    end
-
-    subgraph Persistence ["Relational Databases (MySQL 8.0)"]
-        DB_Account[("🗄️ account_db")]
-        DB_Txn[("🗄️ transaction_db")]
-        DB_Payment[("🗄️ payment_db")]
-    end
-
-    subgraph External ["Third-Party Services"]
-        RazorpayAPI["💳 Razorpay Payment Gateway"]
-    end
-
-    %% Routing
-    Client -->|HTTP REST| Gateway
-    Gateway -->|Rate Limit Checks| Redis
-    Gateway -->|/api/v1/accounts/**| AccountSvc
-    Gateway -->|/api/v1/transactions/**| TxnSvc
-    Gateway -->|/api/v1/payments/**| PaymentSvc
-
-    %% Database connections
-    AccountSvc --> DB_Account
-    TxnSvc --> DB_Txn
-    PaymentSvc --> DB_Payment
-
-    %% Synchronous Feign calls
-    TxnSvc -.->|OpenFeign: Deduct/Credit Balance| AccountSvc
-    FraudSvc -.->|OpenFeign: Get Balance Check| AccountSvc
-
-    %% Kafka Producer / Consumer Flows
-    TxnSvc -->|Pub: transaction.initiated| Kafka
-    Kafka -->|Sub: transaction.initiated| FraudSvc
-
-    FraudSvc -->|Pub: fraud.check.clean OR verification.required| Kafka
-    Kafka -->|Sub: fraud.check.clean / verification.required| TxnSvc
-
-    TxnSvc -->|OTP Generation / State| Redis
-    FraudSvc -->|Velocity / Avg Checks| Redis
-
-    TxnSvc -->|Pub: transaction.completed| Kafka
-    Kafka -->|Sub: transaction.completed - Credit Receiver| AccountSvc
-    Kafka -->|Sub: transaction.completed - Debit/Credit Alerts| NotifSvc
-
-    TxnSvc -->|Pub: fraud.detected| Kafka
-    Kafka -->|Sub: fraud.detected - Block Account| AccountSvc
-    Kafka -->|Sub: fraud.detected - Security Alert| NotifSvc
-
-    TxnSvc -->|Pub: transaction.refunded| Kafka
-    Kafka -->|Sub: transaction.refunded - Refund Alert| NotifSvc
-
-    %% Payment flow
-    PaymentSvc -->|Create Order| RazorpayAPI
-    RazorpayAPI -->|Webhooks: captured / failed| PaymentSvc
-    PaymentSvc -->|Pub: payment.completed / failed| Kafka
-    Kafka -->|Sub: payment alerts| NotifSvc
+```
+                        +-------------+
+                        |   Client    |
+                        +------+------+
+                               | HTTP
+                        +------v------+
+                        | API Gateway |  <- Rate limiting (Redis)
+                        |  Port 8080  |
+                        +--+---+---+--+
+                           |   |   |
+           +---------------+   |   +---------------+
+           |                   |                   |
+    +------v-----+   +---------v----+   +----------v---+
+    |  Account   |   | Transaction  |   |   Payment    |
+    |  Service   |   |   Service    |   |   Service    |
+    |  Port 8081 |   |  Port 8082   |   |  Port 8083   |
+    +------+-----+   +------+-------+   +------+-------+
+           |                |                   |
+      account_db       transaction_db       payment_db
+           |                |                   |
+           +----------------+-------------------+
+                            |
+                     +------v------+
+                     |    Kafka    |  <- Event bus
+                     +------+------+
+                    +-------+--------+
+             +------v-----+   +------v------+
+             |   Fraud    |   |Notification |
+             | Detection  |   |   Service   |
+             |  Port 8084 |   |  Port 8085  |
+             +------------+   +-------------+
 ```
 
+**Key design decisions:**
+
+- **No shared database** — each service owns its data; services talk to each other via Kafka events or Feign HTTP calls.
+- **Async by default** — the transfer API responds immediately with `PROCESSING`, the rest happens in the background via Kafka.
+- **Redis** is used for three things: gateway rate limiting, OTP storage (with TTL), and fraud velocity counters.
+
 ---
 
-## 📦 Microservices Catalog
+## Services
 
-| Service Name | Port | Database / State Store | Key Domain Responsibilities |
+| Service | Port | Storage | What it does |
 | :--- | :---: | :---: | :--- |
-| **`api-gateway`** | `8080` | Redis (Port `6379`) | Unified reverse proxy, route predicates, dynamic IP-based Token Bucket rate limiting via Redis, Spring Actuator health monitoring. |
-| **`account-service`** | `8081` | MySQL (`account_db`) | Account lifecycle, secure 12-digit account number generation (`SecureRandom`), daily transaction limits, balance checks, synchronous debit/credit ledger operations, auto-blocking upon fraud event. |
-| **`transaction-service`** | `8082` | MySQL (`transaction_db`), Redis | SAGA orchestration for fund transfers, transaction state machine (`PROCESSING`, `PENDING_VERIFICATION`, `COMPLETED`, `FLAGGED`), OTP generation & Redis caching, automated SAGA compensations/refunds. |
-| **`fraud-detection-service`** | `8084` | Redis, OpenFeign (`account-service`) | Real-time multi-pattern fraud analysis engine: transaction velocity tracking, amount anomaly detection (rolling average baseline), balance threshold verification. |
-| **`payment-service`** | `8083` | MySQL (`payment_db`) | Razorpay order generation, currency handling (INR in paise), webhook ingestion (`payment.captured`, `payment.failed`), payment status tracking, CORS support. |
-| **`notification-service`** | `8085` | In-Memory (Event Consumer) | Asynchronous consumer for notifications across all business domains: debit/credit alerts, 2FA OTP delivery, account lockout notifications, refund receipts, and payment status updates. |
+| `api-gateway` | `8080` | Redis | Routes requests, enforces IP-based rate limits |
+| `account-service` | `8081` | MySQL | Creates accounts, manages balances, handles blocking |
+| `transaction-service` | `8082` | MySQL + Redis | Coordinates fund transfers via SAGA, handles OTP |
+| `fraud-detection-service` | `8084` | Redis + Feign | Runs fraud checks on every transaction |
+| `payment-service` | `8083` | MySQL | Creates Razorpay orders, processes webhooks |
+| `notification-service` | `8085` | — | Consumes Kafka events and sends alerts |
 
 ---
 
-## ⚙️ Core Engineering Highlights
+## How a Transfer Works (SAGA)
 
-### 1. Distributed SAGA Pattern & Choreography
+The core problem: transferring money involves two accounts in separate databases. If we debit one and the credit fails, we need a way to undo the debit. This is what the SAGA pattern solves.
 
-Transferring money across distributed microservices cannot rely on ACID database transactions across multiple databases. This project solves the problem using an **Asynchronous Choreographed SAGA with Compensating Transactions**:
+### The Happy Path
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor User as Client
+    actor User
     participant GW as API Gateway
     participant TS as Transaction Service
     participant AS as Account Service
-    participant FS as Fraud Detection Service
-    participant RD as Redis
+    participant FS as Fraud Service
     participant KF as Kafka
-    participant NS as Notification Service
 
     User->>GW: POST /api/v1/transactions/transfer
-    GW->>TS: Forward transfer request
-    Note over TS,AS: SAGA STEP 1: Synchronous Debit
-    TS->>AS: PUT /api/v1/accounts/{sender}/deduct?amount=X (OpenFeign)
-    AS-->>TS: Balance Deducted (200 OK)
-    TS->>TS: Save Transaction as PROCESSING
-    Note over TS,KF: SAGA STEP 2: Asynchronous Fraud Check
-    TS->>KF: Publish 'transaction.initiated'
-    TS-->>User: Return 201 CREATED (Status: PROCESSING)
+    GW->>TS: Forward request
+    TS->>AS: Deduct sender balance (OpenFeign)
+    AS-->>TS: 200 OK — balance deducted
+    TS->>TS: Save transaction (status: PROCESSING)
+    TS->>KF: Publish transaction.initiated
+    TS-->>User: 201 Created — status: PROCESSING
 
-    KF->>FS: Consume 'transaction.initiated'
-    FS->>AS: GET /api/v1/accounts/{sender}/balance
-    FS->>RD: Check Velocity & Running Average
-    
-    alt Scenario A: Clean Transaction
-        FS->>KF: Publish 'fraud.check.clean'
-        KF->>TS: Consume 'fraud.check.clean'
+    KF->>FS: transaction.initiated received
+    FS->>FS: Run fraud checks
+    FS->>KF: Publish fraud.check.clean
+
+    KF->>TS: fraud.check.clean received
+    TS->>TS: Mark COMPLETED
+    TS->>KF: Publish transaction.completed
+
+    KF->>AS: Credit receiver balance
+```
+
+1. Sender's balance is **debited synchronously** via Feign before anything else.
+2. A `transaction.initiated` event is published. The API returns `201 PROCESSING` to the client immediately.
+3. The fraud service picks it up, runs checks, and publishes `fraud.check.clean`.
+4. Transaction service marks it `COMPLETED` and publishes `transaction.completed`.
+5. Account service credits the receiver.
+
+---
+
+### When Fraud is Suspected → OTP Challenge
+
+If fraud checks flag a transaction, the flow branches:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant TS as Transaction Service
+    participant RD as Redis
+    participant NS as Notification Service
+    participant AS as Account Service
+    participant KF as Kafka
+
+    KF->>TS: verification.required received
+    TS->>RD: Store OTP (6-digit, TTL: 5 min)
+    TS->>TS: Mark PENDING_VERIFICATION
+    TS->>KF: Publish transaction.otp.generated
+    KF->>NS: Deliver OTP alert to user
+
+    alt Correct OTP submitted in time
+        User->>TS: POST /transactions/{id}/verify?otp=XXXXXX
+        TS->>RD: Validate OTP
         TS->>TS: Mark COMPLETED
-        TS->>KF: Publish 'transaction.completed'
-        par Update Receiver & Notify
-            KF->>AS: Credit Receiver Account
-            KF->>NS: Send Debit & Credit Notifications
-        end
-    else Scenario B: Suspicious Activity Detected
-        FS->>KF: Publish 'verification.required'
-        KF->>TS: Consume 'verification.required'
-        TS->>RD: Store 6-digit OTP (TTL: 5 mins)
-        TS->>TS: Mark PENDING_VERIFICATION
-        TS->>KF: Publish 'transaction.otp.generated'
-        KF->>NS: Deliver OTP Alert to User
-
-        alt User provides correct OTP in time
-            User->>GW: POST /api/v1/transactions/{id}/verify?otp=123456
-            GW->>TS: Verify OTP against Redis
-            TS->>RD: Delete OTP key
-            TS->>TS: Mark COMPLETED
-            TS->>KF: Publish 'transaction.completed'
-            KF->>AS: Credit Receiver Account
-            KF->>NS: Send Success Notification
-        else User provides wrong OTP
-            User->>GW: POST /api/v1/transactions/{id}/verify?otp=999999
-            GW->>TS: Verify OTP
-            TS->>RD: Delete OTP key
-            Note over TS,AS: SAGA COMPENSATION: Refund Sender & Lock Account
-            TS->>KF: Publish 'fraud.detected'
-            KF->>AS: Block Sender Account
-            TS->>AS: PUT /api/v1/accounts/{sender}/credit?amount=X
-            TS->>TS: Mark FLAGGED
-            TS->>KF: Publish 'transaction.refunded'
-            KF->>NS: Send Account Blocked & Refund Alert
-        else OTP Expires (5 minutes)
-            User->>GW: POST /api/v1/transactions/{id}/verify (expired)
-            Note over TS,AS: SAGA COMPENSATION: Auto-Refund Sender
-            TS->>AS: PUT /api/v1/accounts/{sender}/credit?amount=X
-            TS->>TS: Mark FLAGGED (OTP Expired)
-            TS->>KF: Publish 'transaction.refunded'
-            KF->>NS: Send Refund Alert
-        end
+        TS->>KF: Publish transaction.completed
+        KF->>AS: Credit receiver
+    else Wrong OTP or OTP expired
+        User->>TS: POST /transactions/{id}/verify?otp=000000
+        TS->>KF: Publish fraud.detected
+        KF->>AS: Block sender account
+        TS->>AS: Credit back sender (SAGA compensation)
+        TS->>TS: Mark FLAGGED
+        TS->>KF: Publish transaction.refunded
     end
 ```
 
+The **SAGA compensation** is the refund step — if the OTP check fails, we restore the sender's balance by crediting it back synchronously.
+
 ---
 
-### 2. Multi-Layered Fraud Detection Engine
-
-Every transaction is evaluated in real time through three independent, configurable risk heuristics in `fraud-detection-service`:
+### Transaction States
 
 ```
-                                  Incoming Transaction
-                                           │
-                                           ▼
-                 ┌──────────────────────────────────────────────────┐
-                 │  Pattern 1: Velocity Check (Redis)               │
-                 │  Key: fraud:velocity:{accountNumber}             │
-                 │  Threshold: > 5 transactions within 60 seconds   │
-                 └─────────────────────────┬────────────────────────┘
-                                           │ Passed
-                                           ▼
-                 ┌──────────────────────────────────────────────────┐
-                 │  Pattern 2: Amount Spike Anomaly (Redis)         │
-                 │  Key: fraud:avg_amount:{accountNumber}           │
-                 │  Threshold: Amount > 3.0x Rolling Average        │
-                 └─────────────────────────┬────────────────────────┘
-                                           │ Passed
-                                           ▼
-                 ┌──────────────────────────────────────────────────┐
-                 │  Pattern 3: Balance Depletion Check (OpenFeign)  │
-                 │  Source: Real-time balance from Account Service  │
-                 │  Threshold: Amount > 90% of available balance    │
-                 └─────────────────────────┬────────────────────────┘
-                                           │
-                        ┌──────────────────┴──────────────────┐
-                        │                                     │
-                 [ All Passed ]                        [ Any Triggered ]
-                        │                                     │
-                        ▼                                     ▼
-             Emit: fraud.check.clean             Emit: verification.required
-             (Immediate Completion)              (Challenges with 5-min OTP)
+PROCESSING  ──(fraud clean)──────────────────────► COMPLETED
+PROCESSING  ──(fraud flagged)────────────────────► PENDING_VERIFICATION
+PENDING_VERIFICATION  ──(correct OTP)────────────► COMPLETED
+PENDING_VERIFICATION  ──(wrong OTP / expired)────► FLAGGED  (+refund to sender)
 ```
 
-1. **Velocity Check**: Uses Redis atomic `increment()` with a 60-second sliding expiration. Prevents automated rapid-drain attacks.
-2. **Amount Anomaly**: Maintains an adaptive rolling average of historical transfers. If the incoming transfer exceeds $3.0\times$ the historical average, it is flagged.
-3. **Balance Depletion**: Queries `account-service` dynamically using OpenFeign to ensure high-value single transfers that wipe out $> 90\%$ of an account's reserves require explicit step-up authentication.
-
 ---
 
-### 3. Distributed Rate Limiting (Token Bucket)
+## Fraud Detection
 
-Configured at the **API Gateway** layer using **Spring Cloud Gateway** and **Redis Reactive Data Starter**:
+Every transaction goes through three checks inside `fraud-detection-service`:
 
-- **Algorithm**: Redis-backed Token Bucket algorithm.
-- **Key Resolver**: Resolves client IP address (`exchange.getRequest().getRemoteAddress().getAddress().getHostAddress()`).
-- **Configured Route Limits**:
-  - `/api/v1/accounts/**`: Replenish Rate = **10 req/s**, Burst Capacity = **20 requests**.
-  - `/api/v1/transactions/**`: Replenish Rate = **10 req/s**, Burst Capacity = **20 requests**.
-  - `/api/v1/payments/**`: Replenish Rate = **5 req/s**, Burst Capacity = **10 requests**.
-- Exceeding the rate limits returns an instantaneous HTTP `429 Too Many Requests`.
+```mermaid
+flowchart TD
+    A([Incoming transaction]) --> B
 
----
+    B["Check 1: Velocity\nMore than 5 transactions in 60s?\nRedis counter with 60s TTL"]
+    B -->|fail| E
+    B -->|pass| C
 
-### 4. Razorpay Payment Gateway & Webhook Lifecycle
+    C["Check 2: Amount Spike\nAmount > 3x rolling average?\nRedis running average"]
+    C -->|fail| E
+    C -->|pass| D
 
-The `payment-service` allows depositing and paying funds via Razorpay:
-- **Order Generation**: Translates standard decimal amounts (INR) into the smallest currency unit (paise) required by Razorpay API (`amount * 100`).
-- **Order Record Creation**: Persists order metadata in `payment_db` with status `CREATED`.
-- **Webhook Processing**: Receives and decodes server-to-server webhook events from Razorpay:
-  - `payment.captured` $\rightarrow$ Updates payment status to `COMPLETED`, records `razorpayPaymentId`, and publishes `payment.completed` event to Kafka.
-  - `payment.failed` $\rightarrow$ Updates payment status to `FAILED`, records failure message, and publishes `payment.failed` to Kafka.
-- **Asynchronous Notification**: `notification-service` consumes payment events and alerts the user with the payment confirmation or failure details.
+    D["Check 3: Balance Depletion\nAmount > 90% of account balance?\nFeign call to account-service"]
+    D -->|fail| E
+    D -->|pass| F
 
----
-
-## 📬 Kafka Event-Driven Messaging Matrix
-
-| Topic Name | Producer Service | Consumer Service(s) | Key Payload Fields | Description / Business Trigger |
-| :--- | :--- | :--- | :--- | :--- |
-| `transaction.initiated` | `transaction-service` | `fraud-detection-service` | `transactionId`, `senderAccountNumber`, `receiverAccountNumber`, `amount`, `description` | Published when money is debited from sender; triggers fraud evaluation. |
-| `fraud.check.clean` | `fraud-detection-service` | `transaction-service` | `transactionId`, `isFraud: false`, `reason: null` | Published when transaction passes all 3 fraud checks; completes transfer. |
-| `verification.required` | `fraud-detection-service` | `transaction-service` | `transactionId`, `accountNumber`, `amount`, `reason` | Published when fraud check flags transaction; triggers OTP generation in Redis. |
-| `transaction.otp.generated` | `transaction-service` | `notification-service` | `transactionId`, `accountNumber`, `otp`, `amount`, `reason` | Dispatches OTP with 5-minute validity to the customer for 2FA. |
-| `transaction.completed` | `transaction-service` | `account-service`, `notification-service` | `transactionId`, `senderAccountNumber`, `receiverAccountNumber`, `amount`, `description` | Triggers credit to receiver's balance in `account-service` and sends debit/credit alerts. |
-| `fraud.detected` | `transaction-service` | `account-service`, `notification-service` | `transactionId`, `accountNumber`, `reason` | Published on incorrect OTP entry; permanently locks account and sends security alert. |
-| `transaction.refunded` | `transaction-service` | `notification-service` | `transactionId`, `senderAccountNumber`, `amount`, `reason` | Published during SAGA compensation; notifies sender of refunded balance. |
-| `payment.completed` | `payment-service` | `notification-service` | `paymentId`, `accountNumber`, `amount`, `razorpayPaymentId` | Published upon receiving Razorpay `payment.captured` webhook. |
-| `payment.failed` | `payment-service` | `notification-service` | `paymentId`, `accountNumber`, `amount`, `reason` | Published upon receiving Razorpay `payment.failed` webhook. |
-
----
-
-## 🗄 Database Schema & Multi-Database Strategy
-
-Each microservice manages its own schema, executed automatically on Docker initialization via `init.sql`:
-
-```sql
-CREATE DATABASE IF NOT EXISTS account_db;
-CREATE DATABASE IF NOT EXISTS transaction_db;
-CREATE DATABASE IF NOT EXISTS payment_db;
+    E([Publish: verification.required\nOTP challenge triggered])
+    F([Publish: fraud.check.clean\nTransaction auto-completes])
 ```
 
-### Table: `accounts` (`account_db`)
-- `id` (VARCHAR(36), PK, UUID)
-- `account_number` (VARCHAR(12), UNIQUE, Indexed) — Cryptographically generated 12-digit number
-- `account_holder_name` (VARCHAR(255))
-- `email` (VARCHAR(255), UNIQUE)
-- `phone` (VARCHAR(20))
-- `account_type` (ENUM: `SAVINGS`, `CURRENT`)
-- `status` (ENUM: `ACTIVE`, `BLOCKED`, `SUSPENDED`, `CLOSED`)
-- `balance` (DECIMAL(15,2))
-- `daily_transaction_limit` (DECIMAL(15,2)) — Default ₹100,000 for SAVINGS, ₹500,000 for CURRENT
-- `created_at`, `updated_at` (TIMESTAMP)
-
-### Table: `transactions` (`transaction_db`)
-- `id` (VARCHAR(36), PK, UUID)
-- `sender_account_number` (VARCHAR(255))
-- `receiver_account_number` (VARCHAR(255))
-- `amount` (DECIMAL(15,2))
-- `type` (ENUM: `TRANSFER`, `DEPOSIT`, `WITHDRAWAL`, `PAYMENT`)
-- `status` (ENUM: `PENDING`, `PROCESSING`, `PENDING_VERIFICATION`, `COMPLETED`, `FAILED`, `FLAGGED`)
-- `description` (VARCHAR(255))
-- `failure_reason` (VARCHAR(255))
-- `reference_number` (VARCHAR(36), UUID)
-- `created_at` (TIMESTAMP)
-- `completed_at` (TIMESTAMP)
-
-### Table: `payments` (`payment_db`)
-- `id` (VARCHAR(36), PK, UUID)
-- `razorpay_order_id` (VARCHAR(255))
-- `razorpay_payment_id` (VARCHAR(255))
-- `account_number` (VARCHAR(255))
-- `amount` (DECIMAL(15,2))
-- `currency` (VARCHAR(10))
-- `status` (ENUM: `CREATED`, `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`)
-- `description` (VARCHAR(255))
-- `failure_reason` (VARCHAR(255))
-- `created_at`, `updated_at` (TIMESTAMP)
+**Why three checks?**
+- **Velocity** — catches scripted/bot-driven rapid drain attacks.
+- **Amount spike** — flags transfers that are unusually large compared to the account's historical behaviour.
+- **Balance depletion** — catches one-shot wipeouts even if the raw amount looks normal.
 
 ---
 
-## 🚀 REST API Reference
+## Rate Limiting
 
-All requests can be sent through the **API Gateway** on port `8080` or directly to individual microservices.
+Configured at the API Gateway using Spring Cloud Gateway + Redis Token Bucket:
 
-### Account Service (Port `8081` / Gateway `8080`)
+| Route | Replenish Rate | Burst Capacity |
+| :--- | :---: | :---: |
+| `/api/v1/accounts/**` | 10 req/s | 20 |
+| `/api/v1/transactions/**` | 10 req/s | 20 |
+| `/api/v1/payments/**` | 5 req/s | 10 |
 
-#### 1. Create a New Bank Account
-- **Method / Endpoint**: `POST /api/v1/accounts`
-- **Request Body**:
+Rate limiting is per IP address. Exceeding limits returns `HTTP 429`.
+
+---
+
+## Razorpay Integration
+
+The `payment-service` handles external payment deposits:
+
+1. Client calls `POST /api/v1/payments/create-order` with an amount.
+2. Service creates a Razorpay order (converts INR → paise: `amount × 100`).
+3. Client uses the returned `razorpayOrderId` to complete payment on the frontend.
+4. Razorpay sends a webhook (`payment.captured` or `payment.failed`) to `POST /api/v1/payments/webhook`.
+5. Service updates the payment record and publishes a Kafka event for notifications.
+
+---
+
+## Kafka Topics
+
+| Topic | Published by | Consumed by | When |
+| :--- | :--- | :--- | :--- |
+| `transaction.initiated` | transaction-service | fraud-detection-service | Transfer request received |
+| `fraud.check.clean` | fraud-detection-service | transaction-service | All fraud checks pass |
+| `verification.required` | fraud-detection-service | transaction-service | A fraud check triggers |
+| `transaction.otp.generated` | transaction-service | notification-service | OTP has been generated |
+| `transaction.completed` | transaction-service | account-service, notification-service | Transfer completed |
+| `fraud.detected` | transaction-service | account-service, notification-service | Wrong OTP submitted |
+| `transaction.refunded` | transaction-service | notification-service | SAGA compensation executed |
+| `payment.completed` | payment-service | notification-service | Razorpay payment captured |
+| `payment.failed` | payment-service | notification-service | Razorpay payment failed |
+
+---
+
+## Database Schema
+
+Each service has its own isolated database, created automatically from `init.sql` on Docker startup.
+
+### `account_db` — `accounts`
+
+| Column | Type | Notes |
+| :--- | :--- | :--- |
+| `id` | VARCHAR(36) | UUID, primary key |
+| `account_number` | VARCHAR(12) | Unique, cryptographically generated |
+| `account_holder_name` | VARCHAR(255) | |
+| `email` | VARCHAR(255) | Unique |
+| `phone` | VARCHAR(20) | |
+| `account_type` | ENUM | `SAVINGS`, `CURRENT` |
+| `status` | ENUM | `ACTIVE`, `BLOCKED`, `SUSPENDED`, `CLOSED` |
+| `balance` | DECIMAL(15,2) | |
+| `daily_transaction_limit` | DECIMAL(15,2) | ₹1,00,000 (SAVINGS), ₹5,00,000 (CURRENT) |
+| `created_at`, `updated_at` | TIMESTAMP | |
+
+### `transaction_db` — `transactions`
+
+| Column | Type | Notes |
+| :--- | :--- | :--- |
+| `id` | VARCHAR(36) | UUID, primary key |
+| `sender_account_number` | VARCHAR(255) | |
+| `receiver_account_number` | VARCHAR(255) | |
+| `amount` | DECIMAL(15,2) | |
+| `type` | ENUM | `TRANSFER`, `DEPOSIT`, `WITHDRAWAL`, `PAYMENT` |
+| `status` | ENUM | `PENDING`, `PROCESSING`, `PENDING_VERIFICATION`, `COMPLETED`, `FAILED`, `FLAGGED` |
+| `reference_number` | VARCHAR(36) | UUID |
+| `failure_reason` | VARCHAR(255) | Populated on `FLAGGED`/`FAILED` |
+| `created_at`, `completed_at` | TIMESTAMP | |
+
+### `payment_db` — `payments`
+
+| Column | Type | Notes |
+| :--- | :--- | :--- |
+| `id` | VARCHAR(36) | UUID, primary key |
+| `razorpay_order_id` | VARCHAR(255) | From Razorpay API |
+| `razorpay_payment_id` | VARCHAR(255) | Set after webhook |
+| `account_number` | VARCHAR(255) | |
+| `amount` | DECIMAL(15,2) | |
+| `currency` | VARCHAR(10) | `INR` |
+| `status` | ENUM | `CREATED`, `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED` |
+| `failure_reason` | VARCHAR(255) | |
+| `created_at`, `updated_at` | TIMESTAMP | |
+
+---
+
+## API Reference
+
+All endpoints are available through the API Gateway on port `8080`, or directly on each service's port.
+
+### Account Service — `/api/v1/accounts`
+
+<details>
+<summary><strong>POST</strong> /api/v1/accounts — Create account</summary>
+
+**Request:**
 ```json
 {
   "accountHolderName": "John Doe",
@@ -382,14 +320,14 @@ All requests can be sent through the **API Gateway** on port `8080` or directly 
   "initialDeposit": 25000.00
 }
 ```
-- **Response** (`201 Created`):
+
+**Response `201 Created`:**
 ```json
 {
   "id": "e7b0c3fa-774f-4ab3-9c88-123456789abc",
   "accountNumber": "049182736451",
   "accountHolderName": "John Doe",
   "email": "john.doe@example.com",
-  "phone": "+919876543210",
   "accountType": "SAVINGS",
   "status": "ACTIVE",
   "balance": 25000.00,
@@ -397,10 +335,12 @@ All requests can be sent through the **API Gateway** on port `8080` or directly 
   "createdAt": "2026-09-18T10:30:00"
 }
 ```
+</details>
 
-#### 2. Get Account Details
-- **Method / Endpoint**: `GET /api/v1/accounts/{accountNumber}`
-- **Response** (`200 OK`):
+<details>
+<summary><strong>GET</strong> /api/v1/accounts/{accountNumber} — Get account details</summary>
+
+**Response `200 OK`:**
 ```json
 {
   "accountNumber": "049182736451",
@@ -410,28 +350,28 @@ All requests can be sent through the **API Gateway** on port `8080` or directly 
   "balance": 25000.00
 }
 ```
+</details>
 
-#### 3. Get Account Balance
-- **Method / Endpoint**: `GET /api/v1/accounts/{accountNumber}/balance`
-- **Response** (`200 OK`):
-```json
-25000.00
-```
+<details>
+<summary><strong>GET</strong> /api/v1/accounts/{accountNumber}/balance — Get balance</summary>
 
-#### 4. Block Account
-- **Method / Endpoint**: `PUT /api/v1/accounts/{accountNumber}/block`
-- **Response** (`200 OK`):
-```text
-Account blocked successfully
-```
+**Response `200 OK`:** `25000.00`
+</details>
+
+<details>
+<summary><strong>PUT</strong> /api/v1/accounts/{accountNumber}/block — Block account</summary>
+
+**Response `200 OK`:** `Account blocked successfully`
+</details>
 
 ---
 
-### Transaction Service (Port `8082` / Gateway `8080`)
+### Transaction Service — `/api/v1/transactions`
 
-#### 1. Initiate Money Transfer (SAGA Step 1)
-- **Method / Endpoint**: `POST /api/v1/transactions/transfer`
-- **Request Body**:
+<details>
+<summary><strong>POST</strong> /api/v1/transactions/transfer — Initiate transfer</summary>
+
+**Request:**
 ```json
 {
   "senderAccountNumber": "049182736451",
@@ -440,7 +380,8 @@ Account blocked successfully
   "description": "Consulting Fee"
 }
 ```
-- **Response** (`201 Created`):
+
+**Response `201 Created`:**
 ```json
 {
   "id": "c85d89b1-b924-4f22-a58f-28782a173bd9",
@@ -451,15 +392,18 @@ Account blocked successfully
   "status": "PROCESSING",
   "description": "Consulting Fee",
   "referenceNumber": "8c42a450-4822-4876-9da8-a006bb0b9e84",
-  "failureReason": null,
   "createdAt": "2026-09-18T10:35:00",
   "completedAt": null
 }
 ```
 
-#### 2. Verify Transaction with OTP (2FA Step-up)
-- **Method / Endpoint**: `POST /api/v1/transactions/{transactionId}/verify?otp={otp}`
-- **Response (Valid OTP)** (`200 OK`):
+> Status starts as `PROCESSING`. Poll `GET /transactions/{id}` to check final status.
+</details>
+
+<details>
+<summary><strong>POST</strong> /api/v1/transactions/{id}/verify?otp={otp} — Submit OTP</summary>
+
+**Correct OTP — Response `200 OK`:**
 ```json
 {
   "id": "c85d89b1-b924-4f22-a58f-28782a173bd9",
@@ -467,7 +411,8 @@ Account blocked successfully
   "completedAt": "2026-09-18T10:36:12"
 }
 ```
-- **Response (Wrong OTP — Account Blocked & Refunded)** (`200 OK`):
+
+**Wrong OTP — Response `200 OK`:**
 ```json
 {
   "id": "c85d89b1-b924-4f22-a58f-28782a173bd9",
@@ -475,13 +420,18 @@ Account blocked successfully
   "failureReason": "Wrong OTP entered - transaction cancelled, account blocked for security - SAGA Compensation executed, amount refunded"
 }
 ```
+</details>
 
-#### 3. Get Transaction by ID
-- **Method / Endpoint**: `GET /api/v1/transactions/{transactionId}`
+<details>
+<summary><strong>GET</strong> /api/v1/transactions/{id} — Get transaction by ID</summary>
 
-#### 4. Get Account Transaction History
-- **Method / Endpoint**: `GET /api/v1/transactions/account/{accountNumber}`
-- **Response** (`200 OK`):
+Returns the standard transaction object.
+</details>
+
+<details>
+<summary><strong>GET</strong> /api/v1/transactions/account/{accountNumber} — Transaction history</summary>
+
+**Response `200 OK`:**
 ```json
 [
   {
@@ -494,14 +444,16 @@ Account blocked successfully
   }
 ]
 ```
+</details>
 
 ---
 
-### Payment Service (Port `8083` / Gateway `8080`)
+### Payment Service — `/api/v1/payments`
 
-#### 1. Create Razorpay Payment Order
-- **Method / Endpoint**: `POST /api/v1/payments/create-order`
-- **Request Body**:
+<details>
+<summary><strong>POST</strong> /api/v1/payments/create-order — Create Razorpay order</summary>
+
+**Request:**
 ```json
 {
   "accountNumber": "049182736451",
@@ -509,7 +461,8 @@ Account blocked successfully
   "description": "Wallet Load via Razorpay"
 }
 ```
-- **Response** (`201 Created`):
+
+**Response `201 Created`:**
 ```json
 {
   "paymentId": "f9a1e8d4-55cc-44ee-b7d1-332211aabbcc",
@@ -520,329 +473,258 @@ Account blocked successfully
   "status": "CREATED"
 }
 ```
+</details>
 
-#### 2. Handle Razorpay Webhook
-- **Method / Endpoint**: `POST /api/v1/payments/webhook`
-- **Payload**: Standard Razorpay Webhook JSON payload (`payment.captured` or `payment.failed`).
-- **Response** (`200 OK`):
-```text
-Webhook processed
-```
+<details>
+<summary><strong>POST</strong> /api/v1/payments/webhook — Razorpay webhook receiver</summary>
+
+Accepts standard Razorpay webhook JSON (`payment.captured` or `payment.failed`).
+
+**Response `200 OK`:** `Webhook processed`
+</details>
 
 ---
 
-## 🛠 Technology Stack
+## Tech Stack
 
-| Category | Technologies |
+| Layer | Technology |
 | :--- | :--- |
-| **Language & SDK** | **Java 25** (supports Java 21 LTS), Lombok |
-| **Core Frameworks** | **Spring Boot 4.1.1**, Spring Cloud **2025.1.2** |
-| **API Gateway** | **Spring Cloud Gateway (WebFlux / Netty)**, Reactive Redis Rate Limiter |
-| **Inter-Service Communication** | **Spring Cloud OpenFeign**, Apache Kafka |
-| **Message Broker** | **Apache Kafka 7.4.0** (Confluent Platform) + **Zookeeper** |
-| **Data Persistence & Caching** | **MySQL 8.0**, Spring Data JPA / Hibernate 6, **Redis 7** (Lettuce driver) |
-| **Third-Party Integrations** | **Razorpay Java SDK (1.4.6)** |
-| **Containerization & Tooling** | **Docker**, **Docker Compose (v3.8)**, Maven Wrapper (`./mvnw`) |
-| **Observability** | **Spring Boot Actuator** (Health, Info, Gateway Metrics) |
+| Language | Java 25 (compatible with Java 21 LTS) |
+| Framework | Spring Boot 4.1.1, Spring Cloud 2025.1.2 |
+| API Gateway | Spring Cloud Gateway (WebFlux / Netty) |
+| Service Communication | Spring Cloud OpenFeign (sync), Apache Kafka (async) |
+| Message Broker | Apache Kafka 7.4.0 (Confluent) + Zookeeper |
+| Database | MySQL 8.0, Spring Data JPA / Hibernate 6 |
+| Cache / State | Redis 7 (Lettuce driver) |
+| Payments | Razorpay Java SDK 1.4.6 |
+| DevOps | Docker, Docker Compose v3.8, Maven Wrapper |
+| Observability | Spring Boot Actuator |
 
 ---
 
-## 📁 Project Directory Structure
+## Project Structure
 
 ```
 bankingSystemManthan/
-├── .env.example                     # Sample configuration template for ports & API keys
-├── .gitignore                       # Ignored files (logs, IDE configs, target dirs)
-├── docker-compose.yml               # Container orchestration (MySQL, Redis, Kafka, Zookeeper)
-├── init.sql                         # Multi-database init script (account_db, transaction_db, payment_db)
+├── .env.example
+├── docker-compose.yml
+├── init.sql                              # Creates account_db, transaction_db, payment_db
 │
-├── api-gateway/                     # Spring Cloud API Gateway (Port 8080)
-│   ├── pom.xml
-│   └── src/main/java/com/banking/apigateway/
-│       ├── ApiGatewayApplication.java
-│       └── config/RateLimiterConfig.java
+├── api-gateway/
+│   └── src/.../config/RateLimiterConfig.java
 │
-├── account-service/                 # Core Account & Ledger Management (Port 8081)
-│   ├── pom.xml
-│   └── src/main/java/com/banking/accountservice/
+├── account-service/
+│   └── src/.../
 │       ├── controller/AccountController.java
-│       ├── dto/{AccountResponse, CreateAccountRequest, ErrorResponse}.java
-│       ├── exception/GlobalExceptionHandler.java
-│       ├── model/{Account, AccountStatus, AccountType}.java
-│       ├── repository/AccountRepository.java
+│       ├── model/Account.java
 │       └── service/AccountService.java
 │
-├── transaction-service/             # SAGA Coordinator & Fund Transfers (Port 8082)
-│   ├── pom.xml
-│   └── src/main/java/com/banking/transactionservice/
-│       ├── client/AccountServiceClient.java (Feign Client)
-│       ├── config/RedisConfig.java
+├── transaction-service/
+│   └── src/.../
+│       ├── client/AccountServiceClient.java      # Feign client
 │       ├── controller/TransactionController.java
-│       ├── dto/{TransactionResponse, TransferRequest}.java
-│       ├── event/{TransactionInitiatedEvent, TransactionCompletedEvent}.java
-│       ├── model/{Transaction, TransactionStatus, TransactionType}.java
-│       ├── repository/TransactionRepository.java
-│       └── service/{TransactionService, TransactionEventConsumer}.java
+│       ├── service/TransactionService.java
+│       └── service/TransactionEventConsumer.java
 │
-├── fraud-detection-service/         # Real-time Fraud Engine & Risk Patterns (Port 8084)
-│   ├── pom.xml
-│   └── src/main/java/com/banking/frauddetectionservice/
-│       ├── client/AccountServiceClient.java (Feign Client)
-│       ├── model/FraudCheckResult.java
-│       └── service/{FraudDetectionService, TransactionEventConsumer}.java
+├── fraud-detection-service/
+│   └── src/.../
+│       ├── client/AccountServiceClient.java      # Feign client
+│       └── service/FraudDetectionService.java
 │
-├── payment-service/                 # Razorpay Gateway & Webhook Processor (Port 8083)
-│   ├── pom.xml
-│   └── src/main/java/com/banking/paymentservice/
-│       ├── config/CorsConfig.java
+├── payment-service/
+│   └── src/.../
 │       ├── controller/PaymentController.java
-│       ├── dto/{CreatePaymentRequest, PaymentOrderResponse}.java
-│       ├── model/{Payment, PaymentStatus}.java
-│       ├── repository/PaymentRepository.java
 │       └── service/PaymentService.java
 │
-└── notification-service/            # Asynchronous Event Notification Consumer (Port 8085)
-    ├── pom.xml
-    └── src/main/java/com/banking/notificationservice/
-        └── service/NotificationService.java
+└── notification-service/
+    └── src/.../service/NotificationService.java
 ```
 
 ---
 
-## ⚡ Local Setup & Getting Started
+## Local Setup
 
 ### Prerequisites
 
-Ensure you have the following installed on your development machine:
-- **Java 21 or 25**: Verify with `java -version`
-- **Maven 3.9+**: Verify with `mvn -version`
-- **Docker & Docker Compose**: Verify with `docker --version` and `docker compose version`
+- **Java 21 or 25** — `java -version`
+- **Maven 3.9+** — `mvn -version`
+- **Docker + Docker Compose** — `docker --version`
 
 ---
 
-### Step 1: Clone the Repository
+### 1. Clone the repo
 
 ```bash
-git clone https://github.com/<your-username>/Digital-Banking-System-Microservices.git
+git clone https://github.com/Manthan-Sagar/Digital-Banking-System-Microservices.git
 cd Digital-Banking-System-Microservices
 ```
 
----
-
-### Step 2: Configure Environment Variables
-
-Copy the provided `.env.example` file to `.env`:
+### 2. Set up environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Review or edit `.env` with your desired port mappings and Razorpay API credentials:
+Edit `.env` with your credentials:
+
 ```properties
-# Host port configuration to prevent local port collisions
 MYSQL_HOST_PORT=3388
 REDIS_HOST_PORT=6379
 KAFKA_HOST_PORT=29092
 
-# Razorpay API Credentials (Test Mode)
 RAZORPAY_KEY_ID=rzp_test_your_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_secret
 RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 ```
 
----
-
-### Step 3: Start Infrastructure Services (Docker Compose)
-
-Spin up MySQL, Redis, Zookeeper, and Kafka using Docker Compose:
+### 3. Start infrastructure
 
 ```bash
 docker compose up -d
+docker compose ps   # verify all containers are healthy
 ```
 
-Verify that all containers are healthy:
+Expected containers: `banking-mysql` (3388), `banking-redis` (6379), `banking-zookeeper` (2181), `banking-kafka` (29092)
+
+### 4. Start the services
+
+Open a terminal for each service:
+
 ```bash
-docker compose ps
+# Terminal 1
+cd account-service && ./mvnw spring-boot:run
+
+# Terminal 2
+cd transaction-service && ./mvnw spring-boot:run
+
+# Terminal 3
+cd fraud-detection-service && ./mvnw spring-boot:run
+
+# Terminal 4
+cd payment-service && ./mvnw spring-boot:run
+
+# Terminal 5
+cd notification-service && ./mvnw spring-boot:run
+
+# Terminal 6
+cd api-gateway && ./mvnw spring-boot:run
 ```
 
-Expected containers running:
-- `banking-mysql` (Port `3388` $\rightarrow$ `3306`)
-- `banking-redis` (Port `6379`)
-- `banking-zookeeper` (Port `2181`)
-- `banking-kafka` (Port `29092`)
+> **Windows:** replace `./mvnw` with `mvnw.cmd`
 
 ---
 
-### Step 4: Build and Start Microservices
+## Testing the Flows
 
-You can start the services in individual terminal windows using Maven Wrapper (`./mvnw` or `mvnw.cmd` on Windows):
-
-#### Terminal 1 — Account Service (Port `8081`)
-```bash
-cd account-service
-./mvnw spring-boot:run
-```
-
-#### Terminal 2 — Transaction Service (Port `8082`)
-```bash
-cd transaction-service
-./mvnw spring-boot:run
-```
-
-#### Terminal 3 — Fraud Detection Service (Port `8084`)
-```bash
-cd fraud-detection-service
-./mvnw spring-boot:run
-```
-
-#### Terminal 4 — Payment Service (Port `8083`)
-```bash
-cd payment-service
-./mvnw spring-boot:run
-```
-
-#### Terminal 5 — Notification Service (Port `8085`)
-```bash
-cd notification-service
-./mvnw spring-boot:run
-```
-
-#### Terminal 6 — API Gateway (Port `8080`)
-```bash
-cd api-gateway
-./mvnw spring-boot:run
-```
-
----
-
-## 🧪 End-to-End Verification Scenarios
-
-Run the following cURL commands (or import them into Postman) to verify all major workflows:
-
-### Scenario 1: Account Creation
-Create two accounts (Sender and Receiver):
+### 1. Create two accounts
 
 ```bash
-# Create Sender Account
+# Alice (sender)
 curl -X POST http://localhost:8080/api/v1/accounts \
   -H "Content-Type: application/json" \
   -d '{
     "accountHolderName": "Alice Johnson",
-    "email": "alice@banking.com",
+    "email": "alice@example.com",
     "phone": "+919876543210",
     "accountType": "SAVINGS",
     "initialDeposit": 100000.00
   }'
 
-# Create Receiver Account
+# Bob (receiver)
 curl -X POST http://localhost:8080/api/v1/accounts \
   -H "Content-Type: application/json" \
   -d '{
     "accountHolderName": "Bob Smith",
-    "email": "bob@banking.com",
+    "email": "bob@example.com",
     "phone": "+919876543211",
     "accountType": "SAVINGS",
     "initialDeposit": 10000.00
   }'
 ```
 
-*(Note down the returned `accountNumber` values for Alice and Bob)*
+Note down the `accountNumber` from each response.
 
 ---
 
-### Scenario 2: Standard Clean Transfer (Happy Path)
-Transfer an ordinary amount ($₹2,000$) from Alice to Bob:
+### 2. Normal transfer (fraud checks pass)
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/transactions/transfer \
   -H "Content-Type: application/json" \
   -d '{
-    "senderAccountNumber": "<ALICE_ACCOUNT_NUMBER>",
-    "receiverAccountNumber": "<BOB_ACCOUNT_NUMBER>",
+    "senderAccountNumber": "<ALICE_ACCOUNT>",
+    "receiverAccountNumber": "<BOB_ACCOUNT>",
     "amount": 2000.00,
     "description": "Dinner Split"
   }'
 ```
-**Outcome**:
-1. Alice's balance is debited by ₹2,000.
-2. Fraud service evaluates velocity, amount, and balance — passes as clean (`fraud.check.clean`).
-3. Transaction service marks status `COMPLETED`.
-4. Kafka publishes `transaction.completed` $\rightarrow$ Bob's balance is credited by ₹2,000.
-5. Notification service logs dual debit/credit alerts.
+
+Expected: Alice debited → fraud checks pass → Bob credited → notifications logged.
 
 ---
 
-### Scenario 3: Fraud Trigger (Large Amount >90% Balance) $\rightarrow$ OTP Challenge $\rightarrow$ Success
-Transfer $₹95,000$ (triggering the $>90\%$ balance heuristic):
+### 3. Suspicious transfer → OTP challenge → success
+
+Send a large amount (triggers the >90% balance check):
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/transactions/transfer \
   -H "Content-Type: application/json" \
   -d '{
-    "senderAccountNumber": "<ALICE_ACCOUNT_NUMBER>",
-    "receiverAccountNumber": "<BOB_ACCOUNT_NUMBER>",
+    "senderAccountNumber": "<ALICE_ACCOUNT>",
+    "receiverAccountNumber": "<BOB_ACCOUNT>",
     "amount": 95000.00,
     "description": "High Value Transfer"
   }'
 ```
-**Outcome**:
-1. Fraud service detects amount exceeds 90% of Alice's balance.
-2. Emits `verification.required`.
-3. Transaction service saves transaction in `PENDING_VERIFICATION` status and stores a 6-digit OTP in Redis with a 5-minute TTL.
-4. Notification service prints:
-   `"🔐 TRANSACTION VERIFICATION REQUIRED - Your OTP is: 123456. Valid for 5 minutes."`
-5. Verify using the received OTP:
+
+Check the notification-service logs for the OTP, then verify:
+
 ```bash
-curl -X POST "http://localhost:8080/api/v1/transactions/<TRANSACTION_ID>/verify?otp=123456"
+curl -X POST "http://localhost:8080/api/v1/transactions/<TRANSACTION_ID>/verify?otp=<OTP>"
 ```
-6. Transaction transitions to `COMPLETED` and receiver is credited!
 
 ---
 
-### Scenario 4: Fraud Trigger $\rightarrow$ Wrong OTP $\rightarrow$ Account Blocked & SAGA Compensation
-Submit an invalid OTP during verification:
+### 4. Wrong OTP → SAGA compensation
+
+Submit an incorrect OTP:
 
 ```bash
 curl -X POST "http://localhost:8080/api/v1/transactions/<TRANSACTION_ID>/verify?otp=000000"
 ```
-**Outcome**:
-1. Transaction service detects invalid OTP.
-2. Emits `fraud.detected` to Kafka $\rightarrow$ `account-service` immediately blocks Alice's account (`status = BLOCKED`).
-3. Executes **SAGA Compensation**: Synchronously calls `creditBalance` on Alice's account to restore the debited ₹95,000.
-4. Transaction is marked `FLAGGED`.
-5. Notification service alerts Alice that her account has been blocked for security.
+
+Expected: Alice's money is refunded, her account is blocked, notification logged.
 
 ---
 
-### Scenario 5: Razorpay Payment Order Creation
-Create a payment order via `payment-service`:
+### 5. Razorpay payment order
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/payments/create-order \
   -H "Content-Type: application/json" \
   -d '{
-    "accountNumber": "<ALICE_ACCOUNT_NUMBER>",
+    "accountNumber": "<ALICE_ACCOUNT>",
     "amount": 500.00,
     "description": "Deposit via UPI"
   }'
 ```
-**Outcome**:
-Returns a newly created Razorpay Order ID (`order_...`) and stores the payment record with status `CREATED`.
+
+Returns a `razorpayOrderId`. Use the Razorpay test dashboard to simulate a webhook.
 
 ---
 
-## 🔮 Production Considerations & Future Roadmap
+## Roadmap
 
-- [ ] **Distributed Tracing & Observability**: Integrate **OpenTelemetry**, **Micrometer**, and **Grafana Tempo / Zipkin** for distributed trace propagation across Feign clients and Kafka headers.
-- [ ] **Authentication & Authorization**: Integrate **Spring Security** with **OAuth2 / Keycloak** for JWT bearer token validation at the API Gateway.
-- [ ] **Dead Letter Queues (DLQ)**: Configure Kafka dead letter topics (`.DLT`) and retry topics for unhandled message serialization or processing failures.
-- [ ] **Idempotent Consumers**: Implement Kafka idempotent message deduplication using database locks or Redis deduplication keys to prevent duplicate credits during network retries.
-- [ ] **Kubernetes Deployment**: Provide Helm charts and K8s manifests for automated scaling and ingress routing.
+- [ ] **Distributed tracing** — OpenTelemetry + Grafana Tempo / Zipkin
+- [ ] **Authentication** — Spring Security + OAuth2 / Keycloak JWT at the gateway
+- [ ] **Dead Letter Queues** — Kafka DLT for failed message processing
+- [ ] **Idempotent consumers** — Redis deduplication keys to prevent duplicate credits on retry
+- [ ] **Kubernetes** — Helm charts + K8s manifests for production deployment
 
 ---
 
-## 👨‍💻 Author
+## Author
 
-**Manthan Sagar**  
-*Full-Stack & Backend Systems Engineer*  
+**Manthan Sagar**
 - GitHub: [@Manthan-Sagar](https://github.com/Manthan-Sagar)
